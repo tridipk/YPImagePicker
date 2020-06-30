@@ -6,8 +6,8 @@ Pod::Spec.new do |s|
   s.license          = { :type => "MIT", :file => "LICENSE" }
   s.author           = 'S4cha, NikKovIos'
   s.platform         = :ios
-  s.source           = { :git => "https://github.com/tridipk/YPImagePicker.git",
-                         :branch => "coverImage" }
+  s.source           = { :git => "https://github.com/Yummypets/YPImagePicker.git",
+                         :tag => s.version.to_s }
   s.social_media_url = 'https://twitter.com/sachadso'
   s.requires_arc     = true
   s.ios.deployment_target = "9.0"
