@@ -134,13 +134,21 @@ public class YPVideoFiltersVC: UIViewController, IsMediaFilterVC {
                 switch session.status {
                 case .completed:
                     DispatchQueue.main.async {
-                        if let coverImage = self?.coverImageView.image {
-                            let resultVideo = YPMediaVideo(thumbnail: coverImage, videoURL: destinationURL, asset: self?.inputVideo.asset)
-                            didSave(YPMediaItem.video(v: resultVideo))
-                            self?.setupRightBarButtonItem()
-                        } else {
-                            print("YPVideoFiltersVC -> Don't have coverImage.")
+                        var coverImage = UIImage()
+                        if let CI = self?.coverImageView.image{
+                            coverImage = CI
                         }
+                        let resultVideo = YPMediaVideo(thumbnail: coverImage, videoURL: destinationURL, asset: self?.inputVideo.asset)
+                        didSave(YPMediaItem.video(v: resultVideo))
+                        self?.setupRightBarButtonItem()
+                        
+//                        if let coverImage = self?.coverImageView.image {
+//                            let resultVideo = YPMediaVideo(thumbnail: coverImage, videoURL: destinationURL, asset: self?.inputVideo.asset)
+//                            didSave(YPMediaItem.video(v: resultVideo))
+//                            self?.setupRightBarButtonItem()
+//                        } else {
+//                            print("YPVideoFiltersVC -> Don't have coverImage.")
+//                        }
                     }
                 case .failed:
                     print("YPVideoFiltersVC -> Export of the video failed. Reason: \(String(describing: session.error))")
