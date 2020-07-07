@@ -12,6 +12,7 @@ import Photos
 class LibraryMediaManager {
     
     weak var v: YPLibraryView?
+    weak var vEditor: YPEditorView?
     var collection: PHAssetCollection?
     internal var fetchResult: PHFetchResult<PHAsset>!
     internal var previousPreheatRect: CGRect = .zero
@@ -163,9 +164,108 @@ class LibraryMediaManager {
         }
     }
     
+    func fetchVideoURLAndCrop(for videoURL: URL, cropRect: CGRect, callback: @escaping (_ videoURL: URL?) -> Void){
+        do{
+            let asset = AVAsset(url: videoURL)
+            
+            let assetComposition = AVMutableComposition()
+            let trackTimeRange = CMTimeRangeMake(start: CMTime.zero, duration: asset.duration)
+            
+            // 1. Inserting audio and video tracks in composition
+            
+            guard let videoTrack = asset.tracks(withMediaType: AVMediaType.video).first,
+                let videoCompositionTrack = assetComposition
+                    .addMutableTrack(withMediaType: .video,
+                                     preferredTrackID: kCMPersistentTrackID_Invalid) else {
+                                        print("⚠️ PHCachingImageManager >>> Problems with video track")
+                                        return
+                                        
+            }
+            if let audioTrack = asset.tracks(withMediaType: AVMediaType.audio).first,
+                let audioCompositionTrack = assetComposition
+                    .addMutableTrack(withMediaType: AVMediaType.audio,
+                                     preferredTrackID: kCMPersistentTrackID_Invalid) {
+                try audioCompositionTrack.insertTimeRange(trackTimeRange, of: audioTrack, at: CMTime.zero)
+            }
+            
+            try videoCompositionTrack.insertTimeRange(trackTimeRange, of: videoTrack, at: CMTime.zero)
+            
+            // Layer Instructions
+            let layerInstructions = AVMutableVideoCompositionLayerInstruction(assetTrack: videoCompositionTrack)
+            var transform = videoTrack.preferredTransform
+            let videoSize = videoTrack.naturalSize.applying(transform)
+            transform.tx = (videoSize.width < 0) ? abs(videoSize.width) : 0.0
+            transform.ty = (videoSize.height < 0) ? abs(videoSize.height) : 0.0
+            transform.tx -= cropRect.minX
+            transform.ty -= cropRect.minY
+            layerInstructions.setTransform(transform, at: CMTime.zero)
+            
+            // CompositionInstruction
+            let mainInstructions = AVMutableVideoCompositionInstruction()
+            mainInstructions.timeRange = trackTimeRange
+            mainInstructions.layerInstructions = [layerInstructions]
+            
+            // Video Composition
+            let videoComposition = AVMutableVideoComposition(propertiesOf: asset)
+            videoComposition.instructions = [mainInstructions]
+            videoComposition.renderSize = cropRect.size // needed?
+            
+            // 5. Configuring export session
+
+            let fileURL = URL(fileURLWithPath: NSTemporaryDirectory())
+                .appendingUniquePathComponent(pathExtension: YPConfig.video.fileType.fileExtension)
+            let exportSession = assetComposition
+                .export(to: fileURL,
+                        videoComposition: videoComposition,
+                        removeOldFile: true) { [weak self] session in
+                            DispatchQueue.main.async {
+                                switch session.status {
+                                case .completed:
+                                    if let url = session.outputURL {
+                                        if let index = self?.currentExportSessions.firstIndex(of: session) {
+                                            self?.currentExportSessions.remove(at: index)
+                                        }
+                                        callback(url)
+                                    } else {
+                                        print("LibraryMediaManager -> Don't have URL.")
+                                        callback(nil)
+                                    }
+                                case .failed:
+                                    print("LibraryMediaManager -> Export of the video failed. Reason: \(String(describing: session.error))")
+                                    callback(nil)
+                                default:
+                                    print("LibraryMediaManager -> Export session completed with \(session.status) status. Not handling.")
+                                    callback(nil)
+                                }
+                            }
+            }
+
+            // 6. Exporting
+            DispatchQueue.main.async {
+                self.exportTimer = Timer.scheduledTimer(timeInterval: 0.1,
+                                                        target: self,
+                                                        selector: #selector(self.onTickExportTimer),
+                                                        userInfo: exportSession,
+                                                        repeats: true)
+            }
+
+            if let s = exportSession {
+                self.currentExportSessions.append(s)
+            }
+        }
+        catch let error{
+            print("⚠️ PHCachingImageManager >>> \(error)")
+        }
+    }
+    
     @objc func onTickExportTimer(sender: Timer) {
         if let exportSession = sender.userInfo as? AVAssetExportSession {
             if let v = v {
+                if exportSession.progress > 0 {
+                    v.updateProgress(exportSession.progress)
+                }
+            }
+            else if let v = vEditor{
                 if exportSession.progress > 0 {
                     v.updateProgress(exportSession.progress)
                 }
@@ -174,6 +274,7 @@ class LibraryMediaManager {
             if exportSession.progress > 0.99 {
                 sender.invalidate()
                 v?.updateProgress(0)
+                vEditor?.updateProgress(0)
                 self.exportTimer = nil
             }
         }

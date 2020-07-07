@@ -198,6 +198,8 @@ public struct YPConfigLibrary {
     
     /// Allow to preselected media items
     public var preselectedItems: [YPMediaItem]?
+    
+    public var editorVideoItems: [YPEditorMedia]?
 }
 
 /// Encapsulates video specific settings.

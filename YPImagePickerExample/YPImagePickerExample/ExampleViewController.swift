@@ -107,11 +107,18 @@ class ExampleViewController: UIViewController {
 
         /* Defines which screen is shown at launch. Video mode will only work if `showsVideo = true`.
            Default value is `.photo` */
-        config.startOnScreen = .library
+        config.startOnScreen = .onlyVideoEditor
 
         /* Defines which screens are shown at launch, and their order.
            Default value is `[.library, .photo]` */
-        config.screens = [.library, .photo, .video]
+        config.screens = [.onlyVideoEditor]
+        
+        //let url = URL(fileURLWithPath: "/Users/swaniti/Library/Developer/CoreSimulator/Devices/7DD9ED20-4B45-4ACA-8BEA-6AF8AFFD004C/data/Media/PhotoData/OutgoingTemp/66232456-3354-4DE1-8E61-3C7C1A8D059B/ken-video.M4V")
+        let url = URL(string: "https://firebasestorage.googleapis.com/v0/b/jaano2.appspot.com/o/files%2F14lt3nbmj96dd38q6hc684ao2a_video.mp4?alt=media&token=3653f65a-7e9a-463c-9e42-194ba62e1d59")
+        let identifier = UUID().uuidString
+        let item = YPEditorMedia(url: url!, localIdentifier: identifier)
+        
+        config.library.editorVideoItems = [item]
         
         /* Can forbid the items with very big height with this property */
 //        config.library.minWidthForItem = UIScreen.main.bounds.width * 0.8

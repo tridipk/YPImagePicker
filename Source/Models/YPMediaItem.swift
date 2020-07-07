@@ -78,3 +78,14 @@ public extension Array where Element == YPMediaItem {
         return nil
     }
 }
+
+
+public class YPEditorMedia {
+    var url:URL?
+    var localIdentifier:String?
+    
+    public init(url: URL, localIdentifier: String){
+        self.url = url
+        self.localIdentifier = localIdentifier
+    }
+}

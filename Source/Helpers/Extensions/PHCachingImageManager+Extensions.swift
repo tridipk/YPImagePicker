@@ -67,6 +67,29 @@ extension PHCachingImageManager {
         }
     }
     
+    
+    func fetchPreviewFor(video url: URL, targetSize: CGSize, callback: @escaping (UIImage?) -> Void){
+        let asset = AVAsset(url: url)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        imageGenerator.maximumSize = targetSize
+
+        var time = asset.duration
+        //If possible - take not the first frame (it could be completely black or white on camara's videos)
+        time.value = min(time.value, 2)
+
+        do {
+            let imageRef = try imageGenerator.copyCGImage(at: time, actualTime: nil)
+            let thumbnail = UIImage(cgImage: imageRef)
+            callback(thumbnail)
+        }
+        catch let error as NSError{
+            print("Image generation failed with error \(error)")
+            callback(nil)
+        }
+    }
+    
+    
     func fetchPlayerItem(for video: PHAsset, callback: @escaping (AVPlayerItem) -> Void) {
         let videosOptions = PHVideoRequestOptions()
         videosOptions.deliveryMode = PHVideoRequestOptionsDeliveryMode.automatic

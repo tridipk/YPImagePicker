@@ -33,11 +33,13 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
         case library
         case camera
         case video
+        case videoEditor
     }
     
     private var libraryVC: YPLibraryVC?
     private var cameraVC: YPCameraVC?
     private var videoVC: YPVideoCaptureVC?
+    private var onlyVideoEditorVC:YPVideoEditorLibraryVC?
     
     var mode = Mode.camera
     
@@ -81,6 +83,12 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
             }
         }
         
+        //Only video Editor
+        if YPConfig.screens.contains(.onlyVideoEditor){
+            onlyVideoEditorVC = YPVideoEditorLibraryVC()
+            onlyVideoEditorVC?.delegate = self
+        }
+        
         // Show screens
         var vcs = [UIViewController]()
         for screen in YPConfig.screens {
@@ -97,6 +105,10 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
                 if let videoVC = videoVC {
                     vcs.append(videoVC)
                 }
+            case .onlyVideoEditor:
+                if let onlyVideoEditorVC = onlyVideoEditorVC {
+                    vcs.append(onlyVideoEditorVC)
+                }
             }
         }
         controllers = vcs
@@ -110,6 +122,8 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
                 mode = .camera
             case .video:
                 mode = .video
+            case .onlyVideoEditor:
+                mode = .videoEditor
             }
         }
         
@@ -148,6 +162,8 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
             return .camera
         case is YPVideoCaptureVC:
             return .video
+        case is YPVideoEditorLibraryVC:
+            return .videoEditor
         default:
             return .camera
         }
@@ -171,6 +187,9 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
         } else if let videoVC = vc as? YPVideoCaptureVC {
             videoVC.start()
         }
+        else if let vc = vc as? YPVideoEditorLibraryVC{
+            vc.checkPermission()
+        }
     
         updateUI()
     }
@@ -183,6 +202,8 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
             cameraVC?.stopCamera()
         case .video:
             videoVC?.stopCamera()
+        case .videoEditor:
+            onlyVideoEditorVC?.pausePlayer()
         }
     }
     
@@ -289,6 +310,16 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
             navigationItem.titleView = nil
             title = videoVC?.title
             navigationItem.rightBarButtonItem = nil
+        case .videoEditor:
+            //setTitleViewWithTitle(aTitle: onlyVideoEditorVC?.title ?? "")
+            navigationItem.rightBarButtonItem = UIBarButtonItem(title: YPConfig.wordings.next,
+                                                                style: .done,
+                                                                target: self,
+                                                                action: #selector(doneEditor))
+            navigationItem.rightBarButtonItem?.tintColor = YPConfig.colors.tintColor
+            
+            // Disable Next Button until minNumberOfItems is reached.
+            navigationItem.rightBarButtonItem?.isEnabled = onlyVideoEditorVC!.videoItems.count >= YPConfig.library.minNumberOfItems
         }
     }
     
@@ -297,6 +328,9 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
         // Cancelling exporting of all videos
         if let libraryVC = libraryVC {
             libraryVC.mediaManager.forseCancelExporting()
+        }
+        else if let videoEditorVC = onlyVideoEditorVC{
+            videoEditorVC.mediaManager.forseCancelExporting()
         }
         self.didClose?()
     }
@@ -320,6 +354,24 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
         }
     }
     
+    // When pressing "Next"
+    @objc func doneEditor(){
+        guard let editorVC = onlyVideoEditorVC else { print("⚠️ YPPickerVC >>> YPVideoEditorLibraryVC deallocated"); return }
+        
+        if mode == .videoEditor{
+            editorVC.doAfterPermissionCheck { [weak self] in
+                editorVC.selectedMedia(photoCallback: { photo in
+                    self?.didSelectItems?([YPMediaItem.photo(p: photo)])
+                }, videoCallback: { video in
+                    self?.didSelectItems?([YPMediaItem
+                        .video(v: video)])
+                }, multipleItemsCallback: { items in
+                    self?.didSelectItems?(items)
+                })
+            }
+        }
+    }
+    
     func stopAll() {
         libraryVC?.v.assetZoomableView.videoView.deallocate()
         videoVC?.stopCamera()
@@ -330,6 +382,15 @@ open class YPPickerVC: YPBottomPager, YPBottomPagerDelegate {
 extension YPPickerVC: YPLibraryViewDelegate {
     
     public func libraryViewDidTapNext() {
+        if(currentController is YPVideoEditorLibraryVC){
+            onlyVideoEditorVC?.isProcessing = true
+            DispatchQueue.main.async {
+                self.v.scrollView.isScrollEnabled = false
+                self.onlyVideoEditorVC?.v.fadeInLoader()
+                self.navigationItem.rightBarButtonItem = YPLoaders.defaultLoader
+            }
+            return
+        }
         libraryVC?.isProcessing = true
         DispatchQueue.main.async {
             self.v.scrollView.isScrollEnabled = false
@@ -339,6 +400,13 @@ extension YPPickerVC: YPLibraryViewDelegate {
     }
     
     public func libraryViewStartedLoadingImage() {
+        if(currentController is YPVideoEditorLibraryVC){
+            onlyVideoEditorVC?.isProcessing = true
+            DispatchQueue.main.async {
+                self.onlyVideoEditorVC?.v.fadeInLoader()
+            }
+            return
+        }
         libraryVC?.isProcessing = true //TODO remove to enable changing selection while loading but needs cancelling previous image requests.
         DispatchQueue.main.async {
             self.libraryVC?.v.fadeInLoader()
@@ -346,6 +414,15 @@ extension YPPickerVC: YPLibraryViewDelegate {
     }
     
     public func libraryViewFinishedLoading() {
+        if(currentController is YPVideoEditorLibraryVC){
+            onlyVideoEditorVC?.isProcessing = false
+            DispatchQueue.main.async {
+                self.v.scrollView.isScrollEnabled = YPConfig.isScrollToChangeModesEnabled
+                self.onlyVideoEditorVC?.v.hideLoader()
+                self.updateUI()
+            }
+            return
+        }
         libraryVC?.isProcessing = false
         DispatchQueue.main.async {
             self.v.scrollView.isScrollEnabled = YPConfig.isScrollToChangeModesEnabled

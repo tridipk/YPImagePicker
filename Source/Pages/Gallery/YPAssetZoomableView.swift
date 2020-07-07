@@ -26,6 +26,7 @@ final class YPAssetZoomableView: UIScrollView {
     public var minWidth: CGFloat? = YPConfig.library.minWidthForItem
     
     fileprivate var currentAsset: PHAsset?
+    fileprivate var currentURL: URL?
     
     // Image view of the asset for convenience. Can be video preview image view or photo image view.
     public var assetImageView: UIImageView {
@@ -95,6 +96,46 @@ final class YPAssetZoomableView: UIScrollView {
             strongSelf.myDelegate?.ypAssetZoomableViewDidLayoutSubviews(strongSelf)
         }
     }
+    
+    public func setVideo(_ video: URL, mediaManager: LibraryMediaManager, storedCropPosition: YPLibrarySelection?, completion: @escaping () -> Void, updateCropInfo: @escaping () -> Void) {
+        DispatchQueue.global(qos: .background).async {
+            let screenWidth = UIScreen.main.bounds.width
+            let ts = CGSize(width: screenWidth, height: screenWidth)
+            mediaManager.imageManager?.fetchPreviewFor(video: video, targetSize: ts, callback: { [weak self] preview in
+                DispatchQueue.main.async {
+                    guard let strongSelf = self else { return }
+                    guard strongSelf.currentURL != video else { completion(); return}
+                    
+                    
+                    if strongSelf.videoView.isDescendant(of: strongSelf) == false {
+                        strongSelf.isVideoMode = true
+                        strongSelf.photoImageView.removeFromSuperview()
+                        strongSelf.addSubview(strongSelf.videoView)
+                    }
+                    
+                    strongSelf.videoView.setPreviewImage(preview ?? UIImage())
+                    
+                    strongSelf.setAssetFrame(for: strongSelf.videoView, with: preview ?? UIImage())
+                    
+                    completion()
+                    
+                    // Stored crop position in multiple selection
+                    if let scp173 = storedCropPosition {
+                        strongSelf.applyStoredCropPosition(scp173)
+                        //MARK: add update CropInfo after multiple
+                        updateCropInfo()
+                    }
+                }
+            })
+        }
+        
+        DispatchQueue.main.async{
+            self.videoView.loadVideo(video)
+            self.videoView.play()
+            self.myDelegate?.ypAssetZoomableViewDidLayoutSubviews(self)
+        }
+    }
+    
     
     public func setImage(_ photo: PHAsset,
                          mediaManager: LibraryMediaManager,
